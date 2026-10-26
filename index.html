@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>JaxCaller P2P Rooms</title>
+  <title>JaxCaller Mesh & Chat</title>
   <style>
     * {
       box-sizing: border-box;
@@ -18,15 +18,17 @@
       min-height: 100vh;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
 
     header {
-      padding: 0.85rem 1.5rem;
+      padding: 0.75rem 1.25rem;
       background: #111827;
       display: flex;
       justify-content: space-between;
       align-items: center;
       border-bottom: 1px solid #1f2937;
+      z-index: 20;
     }
 
     header h1 {
@@ -46,17 +48,17 @@
 
     #room-badge {
       font-size: 0.75rem;
-      padding: 0.25rem 0.6rem;
+      padding: 0.3rem 0.65rem;
       border-radius: 6px;
       background: #1f2937;
-      color: #94a3b8;
+      color: #38bdf8;
       font-weight: 600;
-      letter-spacing: 1px;
+      letter-spacing: 0.5px;
     }
 
     #status-pill {
       font-size: 0.75rem;
-      padding: 0.25rem 0.6rem;
+      padding: 0.3rem 0.65rem;
       border-radius: 9999px;
       background: #374151;
       color: #d1d5db;
@@ -68,36 +70,38 @@
       color: #34d399;
     }
 
-    main {
+    /* Main Workspace Layout */
+    .app-body {
       flex: 1;
       display: flex;
       position: relative;
+      height: calc(100vh - 120px);
       overflow: hidden;
     }
 
+    /* Video Grid (Responsive Mesh) */
     #gridContainer {
       flex: 1;
       display: grid;
-      gap: 12px;
-      padding: 16px;
+      gap: 10px;
+      padding: 12px;
       background: #030712;
       align-content: center;
       justify-content: center;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       overflow-y: auto;
     }
 
     .tile {
       position: relative;
       background: #111827;
-      border-radius: 12px;
+      border-radius: 10px;
       overflow: hidden;
       aspect-ratio: 16 / 9;
       display: flex;
       align-items: center;
       justify-content: center;
       border: 1px solid #1f2937;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
     }
 
     .tile video {
@@ -106,7 +110,7 @@
       object-fit: cover;
     }
 
-    .tile.self video {
+    .tile.self:not(.screen-sharing) video {
       transform: scaleX(-1);
     }
 
@@ -114,24 +118,102 @@
       position: absolute;
       bottom: 8px;
       left: 8px;
-      background: rgba(15, 23, 42, 0.8);
+      background: rgba(15, 23, 42, 0.85);
       backdrop-filter: blur(4px);
       padding: 3px 8px;
-      border-radius: 6px;
+      border-radius: 5px;
       font-size: 0.75rem;
-      font-weight: 500;
+      font-weight: 600;
       color: #e2e8f0;
     }
 
+    /* Chat Drawer */
+    #chatPanel {
+      width: 320px;
+      background: #111827;
+      border-left: 1px solid #1f2937;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s ease;
+    }
+
+    #chatPanel.hidden-chat {
+      display: none;
+    }
+
+    .chat-header {
+      padding: 0.75rem 1rem;
+      background: #1e293b;
+      font-size: 0.85rem;
+      font-weight: 700;
+      border-bottom: 1px solid #1f2937;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    #chatMessages {
+      flex: 1;
+      padding: 1rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .msg {
+      background: #1f2937;
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      word-break: break-word;
+    }
+
+    .msg .sender {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: #38bdf8;
+      margin-bottom: 2px;
+    }
+
+    .msg.self-msg {
+      background: #0369a1;
+      align-self: flex-end;
+    }
+
+    .msg.self-msg .sender {
+      color: #e0f2fe;
+    }
+
+    .chat-input-bar {
+      padding: 0.75rem;
+      border-top: 1px solid #1f2937;
+      display: flex;
+      gap: 0.5rem;
+      background: #0f172a;
+    }
+
+    .chat-input-bar input {
+      flex: 1;
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: white;
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      outline: none;
+    }
+
+    /* Lobby Modal Overlay */
     .overlay-backdrop {
-      position: absolute;
+      position: fixed;
       inset: 0;
-      background: rgba(3, 7, 18, 0.85);
+      background: rgba(3, 7, 18, 0.9);
       backdrop-filter: blur(8px);
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 50;
+      z-index: 100;
       padding: 1rem;
     }
 
@@ -142,11 +224,13 @@
     .card {
       background: #111827;
       border: 1px solid #1f2937;
-      border-radius: 16px;
+      border-radius: 14px;
       padding: 1.5rem;
       width: 100%;
-      max-width: 440px;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
+      max-width: 520px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7);
+      max-height: 90vh;
+      overflow-y: auto;
     }
 
     .card h2 {
@@ -182,12 +266,12 @@
 
     input[type="text"] {
       flex: 1;
-      padding: 0.7rem 0.85rem;
+      padding: 0.65rem 0.85rem;
       border-radius: 8px;
       border: 1px solid #374151;
       background: #030712;
       color: #f8fafc;
-      font-size: 0.95rem;
+      font-size: 0.9rem;
       outline: none;
     }
 
@@ -196,9 +280,9 @@
     }
 
     .btn {
-      padding: 0.7rem 1.1rem;
+      padding: 0.65rem 1rem;
       border-radius: 8px;
-      font-size: 0.9rem;
+      font-size: 0.85rem;
       font-weight: 600;
       border: none;
       cursor: pointer;
@@ -206,11 +290,6 @@
       align-items: center;
       justify-content: center;
       gap: 0.4rem;
-      user-select: none;
-    }
-
-    .btn:active {
-      transform: scale(0.98);
     }
 
     .btn-primary {
@@ -230,72 +309,67 @@
       background: #374151;
     }
 
-    .room-list-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin: 1.25rem 0 0.5rem 0;
+    /* 10 Default Channels Grid */
+    .default-rooms-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 0.5rem;
     }
 
-    .room-list {
-      max-height: 180px;
-      overflow-y: auto;
-      border: 1px solid #1f2937;
-      border-radius: 8px;
-      background: #0b0f19;
-    }
-
-    .room-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+    .default-room-btn {
+      background: #0f172a;
+      border: 1px solid #1e293b;
       padding: 0.65rem 0.85rem;
-      border-bottom: 1px solid #1f2937;
-    }
-
-    .room-item:last-child {
-      border-bottom: none;
-    }
-
-    .room-name {
-      font-weight: 600;
-      font-size: 0.9rem;
-    }
-
-    .room-meta {
-      font-size: 0.75rem;
-      color: #64748b;
-    }
-
-    .empty-state {
-      padding: 1.5rem;
-      text-align: center;
-      color: #64748b;
+      border-radius: 8px;
+      color: #e2e8f0;
       font-size: 0.85rem;
+      text-align: left;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: background 0.15s, border-color 0.15s;
     }
 
+    .default-room-btn:hover {
+      background: #1e293b;
+      border-color: #38bdf8;
+    }
+
+    .room-count-tag {
+      font-size: 0.7rem;
+      background: #1e293b;
+      color: #94a3b8;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    /* Footer Controls */
     .controls {
+      height: 60px;
       display: flex;
       justify-content: center;
       align-items: center;
       gap: 0.75rem;
-      padding: 1rem;
       background: #111827;
       border-top: 1px solid #1f2937;
+      z-index: 20;
     }
 
     .control-btn {
-      width: 46px;
-      height: 46px;
+      width: 42px;
+      height: 42px;
       border-radius: 50%;
       border: none;
       background: #1f2937;
       color: #f1f5f9;
-      font-size: 1.15rem;
+      font-size: 1.1rem;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
+      transition: all 0.15s;
     }
 
     .control-btn:hover {
@@ -304,6 +378,11 @@
 
     .control-btn.active-off {
       background: #dc2626;
+      color: white;
+    }
+
+    .control-btn.active-on {
+      background: #0284c7;
       color: white;
     }
 
@@ -323,7 +402,8 @@
     </div>
   </header>
 
-  <main>
+  <div class="app-body">
+    <!-- Video Mesh Grid -->
     <div id="gridContainer">
       <div class="tile self" id="selfTile">
         <video id="localVideo" autoplay playsinline muted></video>
@@ -331,47 +411,62 @@
       </div>
     </div>
 
-    <!-- Join / Create Overlay -->
-    <div class="overlay-backdrop" id="lobbyModal">
-      <div class="card">
-        <h2>Enter JaxCaller</h2>
-        <p>Talk with multiple friends peer-to-peer using WebRTC mesh.</p>
-
-        <div class="form-group">
-          <label>Your Display Name</label>
-          <input type="text" id="userNameInput" placeholder="Name or alias" maxlength="16" value="Guest" />
-        </div>
-
-        <div class="form-group">
-          <label>Create or Join Room</label>
-          <div class="input-row">
-            <input type="text" id="roomInput" placeholder="Room name (e.g. general)" maxlength="20" />
-            <button class="btn btn-primary" id="btnEnter" type="button">Go</button>
-          </div>
-        </div>
-
-        <div class="room-list-header">
-          <label style="margin: 0;">Public Rooms</label>
-          <span style="font-size: 0.7rem; color: #64748b;">Live Directory</span>
-        </div>
-        <div class="room-list" id="roomList">
-          <div class="empty-state">No public rooms yet. Type a room name above to start one!</div>
-        </div>
+    <!-- Text Chat Sidebar -->
+    <div id="chatPanel" class="hidden-chat">
+      <div class="chat-header">
+        <span>Room Chat</span>
+        <button class="btn btn-secondary" id="btnCloseChat" style="padding: 2px 6px; font-size: 0.75rem;">✕</button>
+      </div>
+      <div id="chatMessages"></div>
+      <div class="chat-input-bar">
+        <input type="text" id="chatInput" placeholder="Type a message..." maxlength="200" />
+        <button class="btn btn-primary" id="btnSendChat" type="button">Send</button>
       </div>
     </div>
-  </main>
+  </div>
 
+  <!-- Bottom Control Bar -->
   <div class="controls">
     <button class="control-btn" id="toggleMic" title="Toggle Mic" type="button">🎤</button>
     <button class="control-btn" id="toggleCam" title="Toggle Camera" type="button">📹</button>
-    <button class="control-btn" id="btnCopyInvite" title="Copy Room Name" type="button">📋</button>
+    <button class="control-btn" id="toggleScreen" title="Share Screen" type="button">💻</button>
+    <button class="control-btn" id="toggleChat" title="Chat" type="button">💬</button>
+    <button class="control-btn" id="btnCopyInvite" title="Copy Room ID" type="button">📋</button>
     <button class="control-btn danger" id="btnLeave" title="Leave Room" type="button">✕</button>
+  </div>
+
+  <!-- Join / Channel Select Modal -->
+  <div class="overlay-backdrop" id="lobbyModal">
+    <div class="card">
+      <h2>JaxCaller Channels</h2>
+      <p>Pick one of the 10 permanent rooms or create your own custom room.</p>
+
+      <div class="form-group">
+        <label>Your Display Name</label>
+        <input type="text" id="userNameInput" placeholder="Your name or handle" maxlength="16" value="Benny" />
+      </div>
+
+      <div class="form-group">
+        <label>Join or Create Custom Room</label>
+        <div class="input-row">
+          <input type="text" id="customRoomInput" placeholder="Room name or code" maxlength="24" />
+          <button class="btn btn-primary" id="btnCustomGo" type="button">Join</button>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-top: 1.25rem;">
+        <label>10 Always-Open Public Channels</label>
+        <div class="default-rooms-grid" id="defaultRoomsList">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+    </div>
   </div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
     import { 
-      getDatabase, ref, set, get, onValue, push, remove, onDisconnect, child 
+      getDatabase, ref, set, get, onValue, push, remove, onDisconnect, child, serverTimestamp 
     } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-database.js";
 
     const firebaseConfig = {
@@ -385,13 +480,8 @@
       measurementId: "G-ZQX27C95GB"
     };
 
-    let app, db;
-    try {
-      app = initializeApp(firebaseConfig);
-      db = getDatabase(app);
-    } catch (e) {
-      alert("Firebase Initialization Failed: " + e.message);
-    }
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
 
     const rtcConfig = {
       iceServers: [
@@ -400,55 +490,98 @@
       ]
     };
 
-    const myPeerId = "peer_" + Math.random().toString(36).substring(2, 9);
-    let myUserName = "Guest";
+    // The 10 Permanent Public Channels
+    const PERMANENT_ROOMS = [
+      { id: "lounge", name: "☕ Lounge" },
+      { id: "gaming", name: "🎮 Gaming" },
+      { id: "music-beats", name: "🎧 Music & Beats" },
+      { id: "coding", name: "💻 Coding Lab" },
+      { id: "study-chill", name: "📚 Study Chill" },
+      { id: "watch-party", name: "🍿 Watch Party" },
+      { id: "general-1", name: "💬 General 1" },
+      { id: "general-2", name: "💬 General 2" },
+      { id: "tech-talk", name: "⚡ Tech Talk" },
+      { id: "voice-only", name: "🎙️ Voice Room" }
+    ];
+
+    const myPeerId = "p_" + Math.random().toString(36).substring(2, 9);
+    let myUserName = "Benny";
     let activeRoomId = null;
     let localStream = null;
+    let screenStream = null;
+    let isScreenSharing = false;
 
+    // Peer connections Map: peerId -> { pc, queue, polite }
     const peers = new Map();
 
+    // DOM Elements
     const localVideo = document.getElementById("localVideo");
     const gridContainer = document.getElementById("gridContainer");
     const lobbyModal = document.getElementById("lobbyModal");
     const statusPill = document.getElementById("status-pill");
     const roomBadge = document.getElementById("room-badge");
     const selfLabel = document.getElementById("selfLabel");
-    const roomList = document.getElementById("roomList");
-    const roomInput = document.getElementById("roomInput");
+    const selfTile = document.getElementById("selfTile");
     const userNameInput = document.getElementById("userNameInput");
-    const btnEnter = document.getElementById("btnEnter");
+    const customRoomInput = document.getElementById("customRoomInput");
+    const btnCustomGo = document.getElementById("btnCustomGo");
+    const defaultRoomsList = document.getElementById("defaultRoomsList");
+    const chatPanel = document.getElementById("chatPanel");
+    const chatMessages = document.getElementById("chatMessages");
+    const chatInput = document.getElementById("chatInput");
+    const btnSendChat = document.getElementById("btnSendChat");
+    const toggleChatBtn = document.getElementById("toggleChat");
+    const toggleScreenBtn = document.getElementById("toggleScreen");
 
     function setStatus(text, isLive = false) {
       statusPill.textContent = text;
       statusPill.className = isLive ? "live" : "";
     }
 
-    // Creates canvas stream fallback if camera/mic is denied or unavailable
+    // Render 10 Permanent Channels and monitor active counts
+    PERMANENT_ROOMS.forEach(room => {
+      const btn = document.createElement("button");
+      btn.className = "default-room-btn";
+      btn.type = "button";
+      btn.innerHTML = `
+        <span>${room.name}</span>
+        <span class="room-count-tag" id="count_${room.id}">0</span>
+      `;
+      btn.onclick = () => joinRoom(room.id, room.name);
+      defaultRoomsList.appendChild(btn);
+
+      // Listen to peer counts live
+      onValue(ref(db, `rooms/${room.id}/peers`), (snap) => {
+        const val = snap.val() || {};
+        const count = Object.keys(val).length;
+        const countEl = document.getElementById(`count_${room.id}`);
+        if (countEl) countEl.textContent = count;
+      });
+    });
+
+    // Fallback Canvas Stream if no physical camera/mic
     function createFallbackStream() {
       const canvas = document.createElement("canvas");
       canvas.width = 640;
       canvas.height = 480;
       const ctx = canvas.getContext("2d");
-      let angle = 0;
+      let pulse = 0;
 
       setInterval(() => {
-        ctx.fillStyle = "#1e293b";
+        ctx.fillStyle = "#0f172a";
         ctx.fillRect(0, 0, 640, 480);
         ctx.fillStyle = "#38bdf8";
         ctx.beginPath();
-        const x = 320 + Math.cos(angle) * 100;
-        const y = 240 + Math.sin(angle) * 60;
-        ctx.arc(x, y, 40, 0, Math.PI * 2);
+        ctx.arc(320, 220, 50 + Math.sin(pulse) * 10, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "24px sans-serif";
+        ctx.fillStyle = "#f8fafc";
+        ctx.font = "bold 26px sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText(myUserName + " (No Camera)", 320, 240);
-        angle += 0.05;
+        ctx.fillText(myUserName, 320, 320);
+        pulse += 0.08;
       }, 50);
 
-      const stream = canvas.captureStream(25);
-      // Dummy silent audio track
+      const stream = canvas.captureStream(30);
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       const osc = audioCtx.createOscillator();
       const dst = osc.connect(audioCtx.createMediaStreamDestination());
@@ -456,62 +589,36 @@
       const audioTrack = dst.stream.getAudioTracks()[0];
       audioTrack.enabled = false;
       stream.addTrack(audioTrack);
-
       return stream;
     }
 
-    async function setupLocalStream() {
+    async function ensureMediaStream() {
       if (localStream) return;
       try {
         localStream = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: { echoCancellation: true, noiseSuppression: true }
         });
-      } catch (err) {
-        console.warn("Camera/Mic not available, falling back to dummy avatar stream:", err);
+      } catch (e) {
+        console.warn("Using fallback canvas stream:", e);
         localStream = createFallbackStream();
       }
       localVideo.srcObject = localStream;
     }
 
-    // Public Rooms Directory
-    const publicRoomsRef = ref(db, "public_rooms");
-    onValue(publicRoomsRef, (snapshot) => {
-      const data = snapshot.val();
-      roomList.innerHTML = "";
-      if (!data || Object.keys(data).length === 0) {
-        roomList.innerHTML = `<div class="empty-state">No public rooms yet. Type a room name above to start one!</div>`;
-        return;
-      }
-
-      Object.entries(data).forEach(([key, info]) => {
-        if (!info || info.count <= 0) return;
-        const div = document.createElement("div");
-        div.className = "room-item";
-        div.innerHTML = `
-          <div>
-            <div class="room-name">${info.name || key}</div>
-            <div class="room-meta">${info.count} active participant(s)</div>
-          </div>
-          <button class="btn btn-secondary" type="button" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Join</button>
-        `;
-        div.querySelector("button").onclick = () => joinRoom(key, info.name || key);
-        roomList.appendChild(div);
-      });
-    }, (error) => {
-      console.error("Firebase read permission error:", error);
-      alert("Firebase Database Permission Denied. Check your Firebase Database Rules.");
-    });
-
-    function createPeerConnection(targetPeerId, targetName) {
+    // WebRTC Perfect Negotiation Peer Factory
+    function setupPeerConnection(targetPeerId, targetName) {
       const pc = new RTCPeerConnection(rtcConfig);
-      const peerData = { pc, queue: [] };
+      // Deterministic collision handling: polite if myPeerId < targetPeerId
+      const polite = myPeerId < targetPeerId;
+      const peerData = { pc, polite, queue: [], makingOffer: false };
       peers.set(targetPeerId, peerData);
 
-      if (localStream) {
-        localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
-      }
+      // Attach current local tracks
+      const currentStream = isScreenSharing && screenStream ? screenStream : localStream;
+      currentStream.getTracks().forEach((track) => pc.addTrack(track, currentStream));
 
+      // Ontrack handler
       pc.ontrack = (event) => {
         let tile = document.getElementById(`tile_${targetPeerId}`);
         if (!tile) {
@@ -520,17 +627,17 @@
           tile.id = `tile_${targetPeerId}`;
           tile.innerHTML = `
             <video autoplay playsinline></video>
-            <span class="badge">${targetName || "Participant"}</span>
+            <span class="badge">${targetName || "Peer"}</span>
           `;
           gridContainer.appendChild(tile);
         }
         tile.querySelector("video").srcObject = event.streams[0];
       };
 
+      // Push ICE candidate
       pc.onicecandidate = (event) => {
         if (event.candidate && activeRoomId) {
-          const candRef = ref(db, `rooms/${activeRoomId}/signals/${targetPeerId}/${myPeerId}/candidates`);
-          push(candRef, event.candidate.toJSON());
+          push(ref(db, `rooms/${activeRoomId}/signals/${targetPeerId}/${myPeerId}/candidates`), event.candidate.toJSON());
         }
       };
 
@@ -553,138 +660,65 @@
       if (tile) tile.remove();
     }
 
-    async function flushCandidateQueue(peerData) {
+    async function drainIceCandidates(peerData) {
       while (peerData.queue.length > 0) {
         const cand = peerData.queue.shift();
         try {
           await peerData.pc.addIceCandidate(new RTCIceCandidate(cand));
-        } catch (e) {
-          console.warn("ICE candidate flush exception:", e);
+        } catch (err) {
+          console.warn("Candidate drain ignored:", err);
         }
       }
     }
 
-    async function joinRoom(rawRoomId, displayTitle) {
-      const sanitized = rawRoomId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
-      if (!sanitized) {
-        alert("Enter a room name (letters, numbers, hyphens only).");
-        return;
-      }
+    // Main Join Function
+    async function joinRoom(roomId, roomTitle) {
+      myUserName = userNameInput.value.trim() || "Benny";
+      activeRoomId = roomId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
 
-      btnEnter.disabled = true;
-      btnEnter.textContent = "...";
+      await ensureMediaStream();
 
-      try {
-        myUserName = userNameInput.value.trim() || "Guest";
-        activeRoomId = sanitized;
+      lobbyModal.classList.add("hidden");
+      roomBadge.textContent = roomTitle.toUpperCase();
+      selfLabel.textContent = `${myUserName} (You)`;
+      setStatus("Connected", true);
 
-        await setupLocalStream();
+      const roomPeersRef = ref(db, `rooms/${activeRoomId}/peers`);
+      const myPeerRef = child(roomPeersRef, myPeerId);
 
-        lobbyModal.classList.add("hidden");
-        roomBadge.textContent = displayTitle.toUpperCase();
-        selfLabel.textContent = `${myUserName} (You)`;
-        setStatus("Connecting...", false);
+      // Register presence in room
+      await set(myPeerRef, { name: myUserName, joinedAt: Date.now() });
+      onDisconnect(myPeerRef).remove();
 
-        const roomPeersRef = ref(db, `rooms/${activeRoomId}/peers`);
-        const myPeerRef = child(roomPeersRef, myPeerId);
-        const publicRoomRef = ref(db, `public_rooms/${activeRoomId}`);
+      // Read existing participants and create offers
+      const snap = await get(roomPeersRef);
+      const existing = snap.val() || {};
 
-        // Read existing peers
-        const currentPeersSnap = await get(roomPeersRef);
-        const currentPeers = currentPeersSnap.val() || {};
+      for (const [peerId, peerInfo] of Object.entries(existing)) {
+        if (peerId === myPeerId) continue;
 
-        // Register self in room
-        await set(myPeerRef, { name: myUserName, joinedAt: Date.now() });
-        onDisconnect(myPeerRef).remove();
-
-        const count = Object.keys(currentPeers).length + 1;
-        await set(publicRoomRef, { name: displayTitle, count: count });
-        onDisconnect(publicRoomRef).remove();
-
-        // New participant creates offers to all existing peers
-        for (const [existingPeerId, existingInfo] of Object.entries(currentPeers)) {
-          if (existingPeerId === myPeerId) continue;
-
-          const peerData = createPeerConnection(existingPeerId, existingInfo.name);
+        const peerData = setupPeerConnection(peerId, peerInfo.name);
+        try {
+          peerData.makingOffer = true;
           const offer = await peerData.pc.createOffer();
           await peerData.pc.setLocalDescription(offer);
 
-          const offerRef = ref(db, `rooms/${activeRoomId}/signals/${existingPeerId}/${myPeerId}/offer`);
-          await set(offerRef, {
+          await set(ref(db, `rooms/${activeRoomId}/signals/${peerId}/${myPeerId}/offer`), {
             type: offer.type,
             sdp: offer.sdp,
             senderName: myUserName
           });
+        } finally {
+          peerData.makingOffer = false;
         }
+      }
 
-        // Watch for participant dropouts
-        onValue(roomPeersRef, (snap) => {
-          const val = snap.val() || {};
-          peers.forEach((_, id) => {
-            if (!val[id]) removePeer(id);
-          });
-          set(publicRoomRef, { name: displayTitle, count: Object.keys(val).length });
+      // Track peer entries & leaves
+      onValue(roomPeersRef, (snap) => {
+        const current = snap.val() || {};
+        peers.forEach((_, id) => {
+          if (!current[id]) removePeer(id);
         });
+      });
 
-        // Inbox listener for signaling
-        const myInboxRef = ref(db, `rooms/${activeRoomId}/signals/${myPeerId}`);
-        onValue(myInboxRef, async (snap) => {
-          const inboxes = snap.val() || {};
-
-          for (const [fromPeerId, signalData] of Object.entries(inboxes)) {
-            let peerData = peers.get(fromPeerId);
-
-            if (signalData.offer) {
-              if (!peerData) {
-                peerData = createPeerConnection(fromPeerId, signalData.offer.senderName);
-              }
-              if (peerData.pc.signalingState !== "stable") {
-                await Promise.all([
-                  peerData.pc.setLocalDescription({ type: "rollback" }),
-                  peerData.pc.setRemoteDescription(new RTCSessionDescription(signalData.offer))
-                ]);
-              } else {
-                await peerData.pc.setRemoteDescription(new RTCSessionDescription(signalData.offer));
-              }
-
-              await flushCandidateQueue(peerData);
-
-              const answer = await peerData.pc.createAnswer();
-              await peerData.pc.setLocalDescription(answer);
-
-              await set(ref(db, `rooms/${activeRoomId}/signals/${fromPeerId}/${myPeerId}/answer`), {
-                type: answer.type,
-                sdp: answer.sdp
-              });
-
-              remove(ref(db, `rooms/${activeRoomId}/signals/${myPeerId}/${fromPeerId}/offer`));
-            }
-
-            if (signalData.answer && peerData) {
-              if (peerData.pc.signalingState === "have-local-offer") {
-                await peerData.pc.setRemoteDescription(new RTCSessionDescription(signalData.answer));
-                await flushCandidateQueue(peerData);
-              }
-              remove(ref(db, `rooms/${activeRoomId}/signals/${myPeerId}/${fromPeerId}/answer`));
-            }
-
-            if (signalData.candidates) {
-              Object.entries(signalData.candidates).forEach(([candKey, candVal]) => {
-                if (peerData && peerData.pc.remoteDescription) {
-                  peerData.pc.addIceCandidate(new RTCIceCandidate(candVal)).catch(console.warn);
-                } else if (peerData) {
-                  peerData.queue.push(candVal);
-                }
-                remove(ref(db, `rooms/${activeRoomId}/signals/${myPeerId}/${fromPeerId}/candidates/${candKey}`));
-              });
-            }
-          }
-        });
-
-        setStatus("In Room", true);
-      } catch (err) {
-        console.error("Room Join Fatal Error:", err);
-        alert("Error joining room: " + err.message);
-        lobbyModal.classList.remove("hidden");
-      } finally {
-        
+      // Listen fo

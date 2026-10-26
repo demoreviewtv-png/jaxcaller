@@ -75,7 +75,6 @@
       overflow: hidden;
     }
 
-    /* Video Grid (Full Mesh) */
     #gridContainer {
       flex: 1;
       display: grid;
@@ -115,7 +114,7 @@
       position: absolute;
       bottom: 8px;
       left: 8px;
-      background: rgba(15, 23, 42, 0.75);
+      background: rgba(15, 23, 42, 0.8);
       backdrop-filter: blur(4px);
       padding: 3px 8px;
       border-radius: 6px;
@@ -124,7 +123,6 @@
       color: #e2e8f0;
     }
 
-    /* Modals & Overlays */
     .overlay-backdrop {
       position: absolute;
       inset: 0;
@@ -138,7 +136,7 @@
     }
 
     .overlay-backdrop.hidden {
-      display: none;
+      display: none !important;
     }
 
     .card {
@@ -204,11 +202,15 @@
       font-weight: 600;
       border: none;
       cursor: pointer;
-      transition: background 0.15s ease;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 0.4rem;
+      user-select: none;
+    }
+
+    .btn:active {
+      transform: scale(0.98);
     }
 
     .btn-primary {
@@ -272,7 +274,6 @@
       font-size: 0.85rem;
     }
 
-    /* Controls Bar */
     .controls {
       display: flex;
       justify-content: center;
@@ -295,7 +296,6 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.15s ease;
     }
 
     .control-btn:hover {
@@ -310,9 +310,6 @@
     .control-btn.danger {
       background: #b91c1c;
       color: white;
-    }
-    .control-btn.danger:hover {
-      background: #991b1b;
     }
   </style>
 </head>
@@ -330,7 +327,7 @@
     <div id="gridContainer">
       <div class="tile self" id="selfTile">
         <video id="localVideo" autoplay playsinline muted></video>
-        <span class="badge" id="selfLabel">You (Connecting...)</span>
+        <span class="badge" id="selfLabel">You (Standby)</span>
       </div>
     </div>
 
@@ -346,29 +343,29 @@
         </div>
 
         <div class="form-group">
-          <label>Create or Join by Name / Code</label>
+          <label>Create or Join Room</label>
           <div class="input-row">
-            <input type="text" id="roomInput" placeholder="e.g. Lounge, Gaming" maxlength="20" />
-            <button class="btn btn-primary" id="btnEnter">Go</button>
+            <input type="text" id="roomInput" placeholder="Room name (e.g. general)" maxlength="20" />
+            <button class="btn btn-primary" id="btnEnter" type="button">Go</button>
           </div>
         </div>
 
         <div class="room-list-header">
           <label style="margin: 0;">Public Rooms</label>
-          <span style="font-size: 0.7rem; color: #64748b;" id="refreshIndicator">Live</span>
+          <span style="font-size: 0.7rem; color: #64748b;">Live Directory</span>
         </div>
         <div class="room-list" id="roomList">
-          <div class="empty-state">No active rooms found. Type a room name above to start one!</div>
+          <div class="empty-state">No public rooms yet. Type a room name above to start one!</div>
         </div>
       </div>
     </div>
   </main>
 
   <div class="controls">
-    <button class="control-btn" id="toggleMic" title="Toggle Mic">🎤</button>
-    <button class="control-btn" id="toggleCam" title="Toggle Camera">📹</button>
-    <button class="control-btn" id="btnCopyInvite" title="Copy Room Name">📋</button>
-    <button class="control-btn danger" id="btnLeave" title="Leave Room">✕</button>
+    <button class="control-btn" id="toggleMic" title="Toggle Mic" type="button">🎤</button>
+    <button class="control-btn" id="toggleCam" title="Toggle Camera" type="button">📹</button>
+    <button class="control-btn" id="btnCopyInvite" title="Copy Room Name" type="button">📋</button>
+    <button class="control-btn danger" id="btnLeave" title="Leave Room" type="button">✕</button>
   </div>
 
   <script type="module">
@@ -388,8 +385,13 @@
       measurementId: "G-ZQX27C95GB"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
+    let app, db;
+    try {
+      app = initializeApp(firebaseConfig);
+      db = getDatabase(app);
+    } catch (e) {
+      alert("Firebase Initialization Failed: " + e.message);
+    }
 
     const rtcConfig = {
       iceServers: [
@@ -403,7 +405,6 @@
     let activeRoomId = null;
     let localStream = null;
 
-    // Multi-peer tracking: peerId -> { pc, iceCandidatesQueue }
     const peers = new Map();
 
     const localVideo = document.getElementById("localVideo");
@@ -415,60 +416,102 @@
     const roomList = document.getElementById("roomList");
     const roomInput = document.getElementById("roomInput");
     const userNameInput = document.getElementById("userNameInput");
+    const btnEnter = document.getElementById("btnEnter");
 
     function setStatus(text, isLive = false) {
       statusPill.textContent = text;
       statusPill.className = isLive ? "live" : "";
     }
 
-    // 1. Initialize Media Hardware
+    // Creates canvas stream fallback if camera/mic is denied or unavailable
+    function createFallbackStream() {
+      const canvas = document.createElement("canvas");
+      canvas.width = 640;
+      canvas.height = 480;
+      const ctx = canvas.getContext("2d");
+      let angle = 0;
+
+      setInterval(() => {
+        ctx.fillStyle = "#1e293b";
+        ctx.fillRect(0, 0, 640, 480);
+        ctx.fillStyle = "#38bdf8";
+        ctx.beginPath();
+        const x = 320 + Math.cos(angle) * 100;
+        const y = 240 + Math.sin(angle) * 60;
+        ctx.arc(x, y, 40, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "24px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(myUserName + " (No Camera)", 320, 240);
+        angle += 0.05;
+      }, 50);
+
+      const stream = canvas.captureStream(25);
+      // Dummy silent audio track
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const dst = osc.connect(audioCtx.createMediaStreamDestination());
+      osc.start();
+      const audioTrack = dst.stream.getAudioTracks()[0];
+      audioTrack.enabled = false;
+      stream.addTrack(audioTrack);
+
+      return stream;
+    }
+
     async function setupLocalStream() {
-      if (!localStream) {
+      if (localStream) return;
+      try {
         localStream = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: { echoCancellation: true, noiseSuppression: true }
         });
-        localVideo.srcObject = localStream;
+      } catch (err) {
+        console.warn("Camera/Mic not available, falling back to dummy avatar stream:", err);
+        localStream = createFallbackStream();
       }
+      localVideo.srcObject = localStream;
     }
 
-    // 2. Public Rooms Directory Listener
+    // Public Rooms Directory
     const publicRoomsRef = ref(db, "public_rooms");
     onValue(publicRoomsRef, (snapshot) => {
       const data = snapshot.val();
       roomList.innerHTML = "";
-      if (!data) {
-        roomList.innerHTML = `<div class="empty-state">No active rooms found. Type a room name above to start one!</div>`;
+      if (!data || Object.keys(data).length === 0) {
+        roomList.innerHTML = `<div class="empty-state">No public rooms yet. Type a room name above to start one!</div>`;
         return;
       }
 
       Object.entries(data).forEach(([key, info]) => {
+        if (!info || info.count <= 0) return;
         const div = document.createElement("div");
         div.className = "room-item";
         div.innerHTML = `
           <div>
             <div class="room-name">${info.name || key}</div>
-            <div class="room-meta">${info.count || 1} participant(s)</div>
+            <div class="room-meta">${info.count} active participant(s)</div>
           </div>
-          <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Join</button>
+          <button class="btn btn-secondary" type="button" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Join</button>
         `;
         div.querySelector("button").onclick = () => joinRoom(key, info.name || key);
         roomList.appendChild(div);
       });
+    }, (error) => {
+      console.error("Firebase read permission error:", error);
+      alert("Firebase Database Permission Denied. Check your Firebase Database Rules.");
     });
 
-    // 3. Peer Connection Factory
     function createPeerConnection(targetPeerId, targetName) {
       const pc = new RTCPeerConnection(rtcConfig);
-      const peerData = { pc, queue: [], isConnected: false };
+      const peerData = { pc, queue: [] };
       peers.set(targetPeerId, peerData);
 
-      // Add local tracks
       if (localStream) {
         localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
       }
 
-      // Buffer or stream remote tracks
       pc.ontrack = (event) => {
         let tile = document.getElementById(`tile_${targetPeerId}`);
         if (!tile) {
@@ -477,14 +520,13 @@
           tile.id = `tile_${targetPeerId}`;
           tile.innerHTML = `
             <video autoplay playsinline></video>
-            <span class="badge">${targetName || "Friend"}</span>
+            <span class="badge">${targetName || "Participant"}</span>
           `;
           gridContainer.appendChild(tile);
         }
         tile.querySelector("video").srcObject = event.streams[0];
       };
 
-      // Push ICE candidates targeted to peer
       pc.onicecandidate = (event) => {
         if (event.candidate && activeRoomId) {
           const candRef = ref(db, `rooms/${activeRoomId}/signals/${targetPeerId}/${myPeerId}/candidates`);
@@ -511,181 +553,138 @@
       if (tile) tile.remove();
     }
 
-    // Process queued candidates once setRemoteDescription is active
     async function flushCandidateQueue(peerData) {
       while (peerData.queue.length > 0) {
         const cand = peerData.queue.shift();
         try {
           await peerData.pc.addIceCandidate(new RTCIceCandidate(cand));
         } catch (e) {
-          console.warn("ICE error", e);
+          console.warn("ICE candidate flush exception:", e);
         }
       }
     }
 
-    // 4. Join / Mesh Orchestration
     async function joinRoom(rawRoomId, displayTitle) {
-      const sanitizedRoomId = rawRoomId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
-      if (!sanitizedRoomId) return alert("Please enter a valid room name.");
-
-      myUserName = userNameInput.value.trim() || "Guest";
-      activeRoomId = sanitizedRoomId;
-
-      try {
-        await setupLocalStream();
-      } catch (err) {
-        alert("Camera and Microphone permissions are required to enter.");
+      const sanitized = rawRoomId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
+      if (!sanitized) {
+        alert("Enter a room name (letters, numbers, hyphens only).");
         return;
       }
 
-      lobbyModal.classList.add("hidden");
-      roomBadge.textContent = displayTitle.toUpperCase();
-      selfLabel.textContent = `${myUserName} (You)`;
-      setStatus("Connecting...", false);
+      btnEnter.disabled = true;
+      btnEnter.textContent = "...";
 
-      const roomPeersRef = ref(db, `rooms/${activeRoomId}/peers`);
-      const myPeerRef = child(roomPeersRef, myPeerId);
-      const publicRoomRef = ref(db, `public_rooms/${activeRoomId}`);
+      try {
+        myUserName = userNameInput.value.trim() || "Guest";
+        activeRoomId = sanitized;
 
-      // 1. Get existing peers first (to avoid self-signaling collisions)
-      const currentPeersSnap = await get(roomPeersRef);
-      const currentPeers = currentPeersSnap.val() || {};
+        await setupLocalStream();
 
-      // 2. Register myself in the room
-      await set(myPeerRef, { name: myUserName, joinedAt: Date.now() });
-      onDisconnect(myPeerRef).remove();
+        lobbyModal.classList.add("hidden");
+        roomBadge.textContent = displayTitle.toUpperCase();
+        selfLabel.textContent = `${myUserName} (You)`;
+        setStatus("Connecting...", false);
 
-      // Update room directory count on join/leave
-      await set(publicRoomRef, {
-        name: displayTitle,
-        count: Object.keys(currentPeers).length + 1
-      });
-      onDisconnect(publicRoomRef).remove();
+        const roomPeersRef = ref(db, `rooms/${activeRoomId}/peers`);
+        const myPeerRef = child(roomPeersRef, myPeerId);
+        const publicRoomRef = ref(db, `public_rooms/${activeRoomId}`);
 
-      // 3. As the NEW JOINER, initiate offer to ALL existing peers
-      for (const [existingPeerId, existingInfo] of Object.entries(currentPeers)) {
-        if (existingPeerId === myPeerId) continue;
+        // Read existing peers
+        const currentPeersSnap = await get(roomPeersRef);
+        const currentPeers = currentPeersSnap.val() || {};
 
-        const peerData = createPeerConnection(existingPeerId, existingInfo.name);
-        const offer = await peerData.pc.createOffer();
-        await peerData.pc.setLocalDescription(offer);
+        // Register self in room
+        await set(myPeerRef, { name: myUserName, joinedAt: Date.now() });
+        onDisconnect(myPeerRef).remove();
 
-        // Put offer into signaling inbox of target peer
-        const offerRef = ref(db, `rooms/${activeRoomId}/signals/${existingPeerId}/${myPeerId}/offer`);
-        await set(offerRef, {
-          type: offer.type,
-          sdp: offer.sdp,
-          senderName: myUserName
-        });
-      }
+        const count = Object.keys(currentPeers).length + 1;
+        await set(publicRoomRef, { name: displayTitle, count: count });
+        onDisconnect(publicRoomRef).remove();
 
-      // 4. Listen for peers leaving
-      onValue(roomPeersRef, (snap) => {
-        const val = snap.val() || {};
-        peers.forEach((_, id) => {
-          if (!val[id]) removePeer(id);
-        });
-        // Update live directory count
-        set(publicRoomRef, { name: displayTitle, count: Object.keys(val).length });
-      });
+        // New participant creates offers to all existing peers
+        for (const [existingPeerId, existingInfo] of Object.entries(currentPeers)) {
+          if (existingPeerId === myPeerId) continue;
 
-      // 5. Listen to my personal signaling inbox: signals/{myPeerId}/*
-      const myInboxRef = ref(db, `rooms/${activeRoomId}/signals/${myPeerId}`);
-      onValue(myInboxRef, async (snap) => {
-        const inboxes = snap.val() || {};
+          const peerData = createPeerConnection(existingPeerId, existingInfo.name);
+          const offer = await peerData.pc.createOffer();
+          await peerData.pc.setLocalDescription(offer);
 
-        for (const [fromPeerId, signalData] of Object.entries(inboxes)) {
-          let peerData = peers.get(fromPeerId);
-
-          // Handle incoming Offer (from a newer peer)
-          if (signalData.offer) {
-            if (!peerData) {
-              peerData = createPeerConnection(fromPeerId, signalData.offer.senderName);
-            }
-            if (peerData.pc.signalingState !== "stable") {
-              await Promise.all([
-                peerData.pc.setLocalDescription({ type: "rollback" }),
-                peerData.pc.setRemoteDescription(new RTCSessionDescription(signalData.offer))
-              ]);
-            } else {
-              await peerData.pc.setRemoteDescription(new RTCSessionDescription(signalData.offer));
-            }
-
-            await flushCandidateQueue(peerData);
-
-            // Respond with Answer
-            const answer = await peerData.pc.createAnswer();
-            await peerData.pc.setLocalDescription(answer);
-
-            await set(ref(db, `rooms/${activeRoomId}/signals/${fromPeerId}/${myPeerId}/answer`), {
-              type: answer.type,
-              sdp: answer.sdp
-            });
-
-            // Clean consumed offer
-            remove(ref(db, `rooms/${activeRoomId}/signals/${myPeerId}/${fromPeerId}/offer`));
-          }
-
-          // Handle incoming Answer
-          if (signalData.answer && peerData) {
-            if (peerData.pc.signalingState === "have-local-offer") {
-              await peerData.pc.setRemoteDescription(new RTCSessionDescription(signalData.answer));
-              await flushCandidateQueue(peerData);
-            }
-            remove(ref(db, `rooms/${activeRoomId}/signals/${myPeerId}/${fromPeerId}/answer`));
-          }
-
-          // Handle incoming ICE candidates
-          if (signalData.candidates) {
-            Object.entries(signalData.candidates).forEach(([candKey, candVal]) => {
-              if (peerData && peerData.pc.remoteDescription) {
-                peerData.pc.addIceCandidate(new RTCIceCandidate(candVal)).catch(console.warn);
-              } else if (peerData) {
-                peerData.queue.push(candVal);
-              }
-              remove(ref(db, `rooms/${activeRoomId}/signals/${myPeerId}/${fromPeerId}/candidates/${candKey}`));
-            });
-          }
+          const offerRef = ref(db, `rooms/${activeRoomId}/signals/${existingPeerId}/${myPeerId}/offer`);
+          await set(offerRef, {
+            type: offer.type,
+            sdp: offer.sdp,
+            senderName: myUserName
+          });
         }
-      });
 
-      setStatus("In Room", true);
-    }
+        // Watch for participant dropouts
+        onValue(roomPeersRef, (snap) => {
+          const val = snap.val() || {};
+          peers.forEach((_, id) => {
+            if (!val[id]) removePeer(id);
+          });
+          set(publicRoomRef, { name: displayTitle, count: Object.keys(val).length });
+        });
 
-    // 5. Leave & Clean Up
-    function leaveRoom() {
-      if (activeRoomId) {
-        remove(ref(db, `rooms/${activeRoomId}/peers/${myPeerId}`));
-        remove(ref(db, `rooms/${activeRoomId}/signals/${myPeerId}`));
-        peers.forEach((_, id) => removePeer(id));
-        activeRoomId = null;
-      }
+        // Inbox listener for signaling
+        const myInboxRef = ref(db, `rooms/${activeRoomId}/signals/${myPeerId}`);
+        onValue(myInboxRef, async (snap) => {
+          const inboxes = snap.val() || {};
 
-      roomBadge.textContent = "LOBBY";
-      setStatus("Ready", false);
-      lobbyModal.classList.remove("hidden");
-    }
+          for (const [fromPeerId, signalData] of Object.entries(inboxes)) {
+            let peerData = peers.get(fromPeerId);
 
-    document.getElementById("btnEnter").onclick = () => {
-      const room = roomInput.value.trim();
-      if (!room) return alert("Please enter a room name.");
-      joinRoom(room, room);
-    };
+            if (signalData.offer) {
+              if (!peerData) {
+                peerData = createPeerConnection(fromPeerId, signalData.offer.senderName);
+              }
+              if (peerData.pc.signalingState !== "stable") {
+                await Promise.all([
+                  peerData.pc.setLocalDescription({ type: "rollback" }),
+                  peerData.pc.setRemoteDescription(new RTCSessionDescription(signalData.offer))
+                ]);
+              } else {
+                await peerData.pc.setRemoteDescription(new RTCSessionDescription(signalData.offer));
+              }
 
-    document.getElementById("btnLeave").onclick = leaveRoom;
+              await flushCandidateQueue(peerData);
 
-    document.getElementById("btnCopyInvite").onclick = () => {
-      if (!activeRoomId) return alert("Join a room first!");
-      navigator.clipboard.writeText(activeRoomId);
-      alert(`Room name "${activeRoomId}" copied to clipboard! Share it with your friends.`);
-    };
+              const answer = await peerData.pc.createAnswer();
+              await peerData.pc.setLocalDescription(answer);
 
-    // 6. Media Toggles
-    const toggleMicBtn = document.getElementById("toggleMic");
-    toggleMicBtn.onclick = () => {
-      if (!localStream) return;
-      const audioTrack = localStream.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        toggleMicBtn.classList.toggle("active-off", !audioTrack.enabled);
- 
+              await set(ref(db, `rooms/${activeRoomId}/signals/${fromPeerId}/${myPeerId}/answer`), {
+                type: answer.type,
+                sdp: answer.sdp
+              });
+
+              remove(ref(db, `rooms/${activeRoomId}/signals/${myPeerId}/${fromPeerId}/offer`));
+            }
+
+            if (signalData.answer && peerData) {
+              if (peerData.pc.signalingState === "have-local-offer") {
+                await peerData.pc.setRemoteDescription(new RTCSessionDescription(signalData.answer));
+                await flushCandidateQueue(peerData);
+              }
+              remove(ref(db, `rooms/${activeRoomId}/signals/${myPeerId}/${fromPeerId}/answer`));
+            }
+
+            if (signalData.candidates) {
+              Object.entries(signalData.candidates).forEach(([candKey, candVal]) => {
+                if (peerData && peerData.pc.remoteDescription) {
+                  peerData.pc.addIceCandidate(new RTCIceCandidate(candVal)).catch(console.warn);
+                } else if (peerData) {
+                  peerData.queue.push(candVal);
+                }
+                remove(ref(db, `rooms/${activeRoomId}/signals/${myPeerId}/${fromPeerId}/candidates/${candKey}`));
+              });
+            }
+          }
+        });
+
+        setStatus("In Room", true);
+      } catch (err) {
+        console.error("Room Join Fatal Error:", err);
+        alert("Error joining room: " + err.message);
+        lobbyModal.classList.remove("hidden");
+      } finally {
+        

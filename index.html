@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JaxCaller P2P</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    body {
+      background-color: #0f172a;
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 1rem 1.5rem;
+      background: #1e293b;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #334155;
+    }
+
+    header h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #38bdf8;
+    }
+
+    #status-pill {
+      font-size: 0.8rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 9999px;
+      background: #334155;
+      color: #cbd5e1;
+      font-weight: 500;
+    }
+
+    #status-pill.connected {
+      background: #065f46;
+      color: #34d399;
+    }
+
+    #status-pill.calling {
+      background: #854d0e;
+      color: #fde047;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* Video Stage */
+    .stage {
+      flex: 1;
+      position: relative;
+      background: #020617;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      min-height: 380px;
+    }
+
+    video#remoteVideo {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #020617;
+    }
+
+    video#localVideo {
+      position: absolute;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      width: 160px;
+      height: 120px;
+      border-radius: 0.75rem;
+      object-fit: cover;
+      background: #1e293b;
+      border: 2px solid #38bdf8;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+      z-index: 10;
+      transform: scaleX(-1);
+    }
+
+    .placeholder-text {
+      position: absolute;
+      color: #64748b;
+      font-size: 1rem;
+      pointer-events: none;
+    }
+
+    /* Lobby Overlay */
+    .overlay-card {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #1e293b;
+      padding: 1.5rem;
+      border-radius: 1rem;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+      width: 90%;
+      max-width: 360px;
+      z-index: 20;
+      border: 1px solid #334155;
+    }
+
+    .overlay-card.hidden {
+      display: none;
+    }
+
+    .overlay-card h2 {
+      font-size: 1.1rem;
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 0.75rem;
+      border-radius: 0.5rem;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-bottom: 0.75rem;
+    }
+
+    .btn-primary {
+      background: #0284c7;
+      color: white;
+    }
+    .btn-primary:hover {
+      background: #0369a1;
+    }
+
+    .btn-secondary {
+      background: #334155;
+      color: white;
+    }
+    .btn-secondary:hover {
+      background: #475569;
+    }
+
+    .input-field {
+      width: 100%;
+      padding: 0.75rem;
+      border-radius: 0.5rem;
+      border: 1px solid #475569;
+      background: #0f172a;
+      color: white;
+      margin-bottom: 0.75rem;
+      text-align: center;
+      font-size: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    .room-code-display {
+      background: #0f172a;
+      padding: 0.75rem;
+      border-radius: 0.5rem;
+      text-align: center;
+      font-size: 1.5rem;
+      font-weight: bold;
+      letter-spacing: 3px;
+      color: #38bdf8;
+      margin-bottom: 0.75rem;
+      user-select: all;
+    }
+
+    /* Controls Bar */
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      padding: 1.25rem;
+      background: #1e293b;
+      border-top: 1px solid #334155;
+    }
+
+    .control-btn {
+      background: #334155;
+      color: white;
+      border: none;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+    }
+
+    .control-btn.active-off {
+      background: #ef4444;
+    }
+
+    .control-btn.hangup {
+      background: #dc2626;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>JaxCaller P2P</h1>
+    <div id="status-pill">Ready</div>
+  </header>
+
+  <main>
+    <div class="stage">
+      <video id="remoteVideo" autoplay playsinline></video>
+      <video id="localVideo" autoplay playsinline muted></video>
+      <div class="placeholder-text" id="placeholder">No remote video</div>
+
+      <!-- Action Panel -->
+      <div class="overlay-card" id="lobbyModal">
+        <h2>Start a Call</h2>
+        <button class="btn btn-primary" id="btnCreate">Create Call Room</button>
+        <div style="text-align: center; margin-bottom: 0.75rem; color: #64748b;">— OR —</div>
+        <input type="text" id="joinInput" class="input-field" placeholder="ROOM CODE" maxlength="6" />
+        <button class="btn btn-secondary" id="btnJoin">Join Room</button>
+      </div>
+
+      <!-- Code Share Modal -->
+      <div class="overlay-card hidden" id="shareModal">
+        <h2>Share Code with Friend</h2>
+        <div class="room-code-display" id="codeDisplay">------</div>
+        <button class="btn btn-primary" id="btnCopy">Copy Code</button>
+        <button class="btn btn-secondary" id="btnCancel">Cancel Call</button>
+      </div>
+    </div>
+
+    <!-- Call Control Bar -->
+    <div class="controls">
+      <button class="control-btn" id="toggleMic" title="Mute/Unmute Mic">🎤</button>
+      <button class="control-btn" id="toggleCam" title="Enable/Disable Camera">📹</button>
+      <button class="control-btn hangup" id="btnHangup" title="End Call">✕</button>
+    </div>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+    import { getDatabase, ref, set, get, onValue, push, remove, onDisconnect } 
+      from "https://www.gstatic.com/firebasejs/13.1.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyA_HdDmUHYExam_H0BC5wMAy3ZF8B_zVks",
+      authDomain: "jaxcaller-75ff6.firebaseapp.com",
+      databaseURL: "https://jaxcaller-75ff6-default-rtdb.firebaseio.com",
+      projectId: "jaxcaller-75ff6",
+      storageBucket: "jaxcaller-75ff6.firebasestorage.app",
+      messagingSenderId: "979747955939",
+      appId: "1:979747955939:web:b9c3029943df65e0cf11d6",
+      measurementId: "G-ZQX27C95GB"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const rtcConfig = {
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" }
+      ]
+    };
+
+    let peerConnection = null;
+    let localStream = null;
+    let currentRoomId = null;
+    let isCaller = false;
+
+    const localVideo = document.getElementById("localVideo");
+    const remoteVideo = document.getElementById("remoteVideo");
+    const statusPill = document.getElementById("status-pill");
+    const placeholder = document.getElementById("placeholder");
+    const lobbyModal = document.getElementById("lobbyModal");
+    const shareModal = document.getElementById("shareModal");
+    const codeDisplay = document.getElementById("codeDisplay");
+    const joinInput = document.getElementById("joinInput");
+
+    function setStatus(text, statusClass = "") {
+      statusPill.textContent = text;
+      statusPill.className = statusClass;
+    }
+
+    // Step 1: Initialize local media
+    async function initMedia() {
+      if (!localStream) {
+        localStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: { echoCancellation: true, noiseSuppression: true }
+        });
+        localVideo.srcObject = localStream;
+      }
+    }
+
+    // Step 2: Initialize WebRTC Peer Connection
+    function setupPeerConnection() {
+      peerConnection = new RTCPeerConnection(rtcConfig);
+
+      localStream.getTracks().forEach((track) => {
+        peerConnection.addTrack(track, localStream);
+      });
+
+      peerConnection.ontrack = (event) => {
+        remoteVideo.srcObject = event.streams[0];
+        placeholder.style.display = "none";
+      };
+
+      peerConnection.onconnectionstatechange = () => {
+        switch (peerConnection.connectionState) {
+          case "connected":
+            setStatus("Connected", "connected");
+            shareModal.classList.add("hidden");
+            break;
+          case "disconnected":
+          case "failed":
+            setStatus("Disconnected");
+            hangUp();
+            break;
+        }
+      };
+    }
+
+    // CREATE ROOM (Caller)
+    document.getElementById("btnCreate").onclick = async () => {
+      try {
+        await initMedia();
+        setupPeerConnection();
+
+        currentRoomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+        isCaller = true;
+        const roomRef = ref(db, `rooms/${currentRoomId}`);
+
+        // Cleanup DB room node if user disconnects
+        onDisconnect(roomRef).remove();
+
+        // Push ICE candidates
+        const callerCandidatesRef = ref(db, `rooms/${currentRoomId}/callerCandidates`);
+        peerConnection.onicecandidate = (event) => {
+          if (event.candidate) {
+            push(callerCandidatesRef, event.candidate.toJSON());
+          }
+        };
+
+        // Create Offer
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+
+        await set(roomRef, {
+          offer: { type: offer.type, sdp: offer.sdp }
+        });
+
+        // Listen for Answer
+        onValue(ref(db, `rooms/${currentRoomId}/answer`), async (snapshot) => {
+          const answer = snapshot.val();
+          if (answer && !peerConnection.currentRemoteDescription) {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+          }
+        });
+
+        // Listen for Callee ICE Candidates
+        onValue(ref(db, `rooms/${currentRoomId}/calleeCandidates`), (snapshot) => {
+          snapshot.forEach((child) => {
+            peerConnection.addIceCandidate(new RTCIceCandidate(child.val())).catch(console.error);
+          });
+        });
+
+        lobbyModal.classList.add("hidden");
+        codeDisplay.textContent = currentRoomId;
+        shareModal.classList.remove("hidden");
+        setStatus("Waiting for friend...", "calling");
+      } catch (err) {
+        console.error("Call Creation Error:", err);
+        alert("Camera/Mic access required to initiate a call.");
+      }
+    };
+
+    // JOIN ROOM (Callee)
+    document.getElementById("btnJoin").onclick = async () => {
+      const roomId = joinInput.value.trim().toUpperCase();
+      if (!roomId) return alert("Please enter a room code.");
+
+      try {
+        const roomRef = ref(db, `rooms/${roomId}`);
+        const snapshot = await get(roomRef);
+
+        if (!snapshot.exists()) {
+          return alert("Room not found! Check the code and try again.");
+        }
+
+        await initMedia();
+        setupPeerConnection();
+        currentRoomId = roomId;
+        isCaller = false;
+
+        onDisconnect(roomRef).remove();
+
+        // Push Callee ICE candidates
+        const calleeCandidatesRef = ref(db, `rooms/${currentRoomId}/calleeCandidates`);
+        peerConnection.onicecandidate = (event) => {
+          if (event.candidate) {
+            push(calleeCandidatesRef, event.candidate.toJSON());
+          }
+        };
+
+        // Set Remote Description from Caller Offer
+        const offer = snapshot.val().offer;
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+
+        // Create & Set Local Answer
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+
+        await set(ref(db, `rooms/${currentRoomId}/answer`), {
+          type: answer.type,
+          sdp: answer.sdp
+        });
+
+        // Listen for Caller ICE Candidates
+        onValue(ref(db, `rooms/${currentRoomId}/callerCandidates`), (snapshot) => {
+          snapshot.forEach((child) => {
+            peerConnection.addIceCandidate(new RTCIceCandidate(child.val())).catch(console.error);
+          });
+        });
+
+        lobbyModal.classList.add("hidden");
+        setStatus("Connecting...", "calling");
+      } catch (err) {
+        console.error("Join Room Error:", err);
+        alert("Could not connect to room: " + err.message);
+      }
+    };
+
+    // COPY CODE
+    document.getElementById("btnCopy").onclick = () => {
+      navigator.clipboard.writeText(currentRoomId);
+      document.getElementById("btnCopy").textContent = "Copied!";
+      setTimeout(() => {
+        document.getElementById("btnCopy").textContent = "Copy Code";
+      }, 2000);
+    };
+
+    // HANGUP & CLEANUP
+    function hangUp() {
+      if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+      }
+      if (currentRoomId) {
+        remove(ref(db, `rooms/${currentRoomId}`)).catch(() => {});
+        currentRoomId = null;
+      }
+      if (remoteVideo.srcObject) {
+        remoteVideo.srcObject.getTracks().forEach((track) => track.stop());
+        remoteVideo.srcObject = null;
+      }
+
+      placeholder.style.display = "block";
+      shareModal.classList.add("hidden");
+      lobbyModal.classList.remove("hidden");
+      setStatus("Ready");
+    }
+
+    document.getElementById("btnHangup").onclick = hangUp;
+    document.getElementById("btnCancel").onclick = hangUp;
+
+    // MEDIA CONTROLS
+    const toggleMic = document.getElementById("toggleMic");
+    toggleMic.onclick = () => {
+      if (!localStream) return;
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        toggleMic.classList.toggle("active-off", !audioTrack.enabled);
+        toggleMic.textContent = audioTrack.enabled ? "🎤" : "🔇";
+      }
+    };
+
+    const toggleCam = document.getElementById("toggleCam");
+    toggleCam.onclick = () => {
+      if (!localStream) return;
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled;
+        toggleCam.classList.toggle("active-off", !videoTrack.enabled);
+        toggleCam.textContent = videoTrack.enabled ? "📹" : "🚫";
+      }
+    };
+  </script>
+</body>
+</html>
